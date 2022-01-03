@@ -1,0 +1,22 @@
+syntax = "proto3";
+option go_package = "passive-replication/proto";
+
+service Replication {
+    rpc HelloWorld (ReplicationMessage) returns (Empty);
+}
+
+service Election {
+    rpc Election (ElectionMessage) returns (Empty);
+    rpc Heartbeat (Empty) returns (Empty);
+}
+
+message Empty {}
+
+message ReplicationMessage {
+    int32 value = 1;
+    string fromIp = 2;
+}
+
+message ElectionMessage {
+    
+}
