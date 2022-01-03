@@ -2,7 +2,7 @@ syntax = "proto3";
 option go_package = "passive-replication/proto";
 
 service Replication {
-    rpc HelloWorld (ReplicationMessage) returns (Empty);
+    rpc Increment (Empty) returns (ReplicaReply);
 }
 
 service Election {
@@ -12,9 +12,8 @@ service Election {
 
 message Empty {}
 
-message ReplicationMessage {
+message ReplicaReply {
     int32 value = 1;
-    string fromIp = 2;
 }
 
 message ElectionMessage {

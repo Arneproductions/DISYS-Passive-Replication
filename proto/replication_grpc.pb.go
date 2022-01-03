@@ -18,7 +18,7 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ReplicationClient interface {
-	HelloWorld(ctx context.Context, in *ReplicationMessage, opts ...grpc.CallOption) (*Empty, error)
+	Increment(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ReplicaReply, error)
 }
 
 type replicationClient struct {
@@ -29,9 +29,9 @@ func NewReplicationClient(cc grpc.ClientConnInterface) ReplicationClient {
 	return &replicationClient{cc}
 }
 
-func (c *replicationClient) HelloWorld(ctx context.Context, in *ReplicationMessage, opts ...grpc.CallOption) (*Empty, error) {
-	out := new(Empty)
-	err := c.cc.Invoke(ctx, "/Replication/HelloWorld", in, out, opts...)
+func (c *replicationClient) Increment(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ReplicaReply, error) {
+	out := new(ReplicaReply)
+	err := c.cc.Invoke(ctx, "/Replication/Increment", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +42,7 @@ func (c *replicationClient) HelloWorld(ctx context.Context, in *ReplicationMessa
 // All implementations must embed UnimplementedReplicationServer
 // for forward compatibility
 type ReplicationServer interface {
-	HelloWorld(context.Context, *ReplicationMessage) (*Empty, error)
+	Increment(context.Context, *Empty) (*ReplicaReply, error)
 	mustEmbedUnimplementedReplicationServer()
 }
 
@@ -50,8 +50,8 @@ type ReplicationServer interface {
 type UnimplementedReplicationServer struct {
 }
 
-func (UnimplementedReplicationServer) HelloWorld(context.Context, *ReplicationMessage) (*Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method HelloWorld not implemented")
+func (UnimplementedReplicationServer) Increment(context.Context, *Empty) (*ReplicaReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Increment not implemented")
 }
 func (UnimplementedReplicationServer) mustEmbedUnimplementedReplicationServer() {}
 
@@ -66,20 +66,20 @@ func RegisterReplicationServer(s grpc.ServiceRegistrar, srv ReplicationServer) {
 	s.RegisterService(&Replication_ServiceDesc, srv)
 }
 
-func _Replication_HelloWorld_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ReplicationMessage)
+func _Replication_Increment_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ReplicationServer).HelloWorld(ctx, in)
+		return srv.(ReplicationServer).Increment(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/Replication/HelloWorld",
+		FullMethod: "/Replication/Increment",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ReplicationServer).HelloWorld(ctx, req.(*ReplicationMessage))
+		return srv.(ReplicationServer).Increment(ctx, req.(*Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -92,8 +92,8 @@ var Replication_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*ReplicationServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "HelloWorld",
-			Handler:    _Replication_HelloWorld_Handler,
+			MethodName: "Increment",
+			Handler:    _Replication_Increment_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
