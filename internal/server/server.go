@@ -7,6 +7,7 @@ import (
 	"net"
 	grpcUtil "passive-replication/internal/grpc"
 	proto "passive-replication/proto"
+	"strings"
 	"sync"
 
 	"google.golang.org/grpc"
@@ -22,8 +23,8 @@ const (
 )
 
 type Node struct {
-	status      NodeStatus
 	ip          string
+	status      NodeStatus
 	leaderIp    string
 	value       int32
 	replicas    []string
@@ -33,8 +34,35 @@ type Node struct {
 	proto.UnimplementedReplicationServer
 }
 
+func CreateNewNode(ip string, status NodeStatus, leaderIp string, replicas []string) Node {
+
+	return Node{
+		ip:          ip,
+		status:      status,
+		leaderIp:    leaderIp,
+		value:       0,
+		replicas:    replicas,
+		statusMutex: sync.RWMutex{},
+		valueMutex:  sync.RWMutex{},
+	}
+}
+
 func (n *Node) StartServer() {
-	net.Listen("tcp", n.ip)
+	log.Printf("Starting server...")
+
+	lis, err := net.Listen("tcp", ":5001")
+	if err != nil {
+		log.Printf("Failed to listen: %v", err)
+	}
+
+	s := grpc.NewServer()
+	proto.RegisterReplicationServer(s, n)
+	// TODO: proto.RegisterElectionServer(s, n)
+
+	log.Printf("Server listening on %v", lis.Addr())
+	if err := s.Serve(lis); err != nil {
+		log.Printf("Failed to serve: %v", err)
+	}
 }
 
 func (n *Node) Increment(ctx context.Context, message *proto.Empty) (*proto.ReplicaReply, error) {
@@ -54,7 +82,7 @@ func (n *Node) Increment(ctx context.Context, message *proto.Empty) (*proto.Repl
 
 			if _, err := n.SendIncrement(v); err != nil {
 				// Replica does not respond and is now declared dead
-				n.replicas[idx] = ""
+				n.declareReplicaDead(idx)
 			}
 		}
 
@@ -94,6 +122,54 @@ func (n *Node) SendIncrement(ip string) (*proto.ReplicaReply, error) {
 	} else {
 		return resp, nil
 	}
+}
+
+func (n *Node) Election(ctx context.Context, in *proto.ElectionMessage) (*proto.Empty, error) {
+	return nil, nil
+}
+
+func (n *Node) Elected(ctx context.Context, in *proto.Empty) (*proto.Empty, error) {
+	return nil, nil
+}
+
+func (n *Node) Heartbeat(ctx context.Context, in *proto.HeartbeatMessage) (*proto.Empty, error) {
+	n.replicas = in.GetReplicas() // Update list of replicas
+
+	return &proto.Empty{}, nil
+}
+
+func (n *Node) SendHeartbeat() {
+
+	if n.status != Leader {
+		return // Ensure only the leader can perform heartbeats
+	}
+
+	for idx, replicaIp := range n.replicas {
+
+		// Do not perform heartbeats on nodes that are dead or to itself
+		if strings.HasPrefix(replicaIp, n.ip) || len(replicaIp) == 0 {
+			continue
+		}
+
+		conn, err := grpc.Dial(replicaIp, grpc.WithInsecure(), grpc.WithBlock())
+		if err != nil {
+			log.Printf("Could not connect: %v\n", err)
+		}
+		defer conn.Close()
+
+		c := proto.NewElectionClient(conn)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		if _, err := c.Heartbeat(ctx, &proto.HeartbeatMessage{Replicas: n.replicas}); err != nil {
+			
+			defer n.declareReplicaDead(idx)
+		}
+	}
+}
+
+func (n *Node) declareReplicaDead(index int) {
+	n.replicas[index] = ""
 }
 
 func (n *Node) HasStatus(status NodeStatus) bool {
