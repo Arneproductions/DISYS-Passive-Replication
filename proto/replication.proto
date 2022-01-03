@@ -7,7 +7,8 @@ service Replication {
 
 service Election {
     rpc Election (ElectionMessage) returns (Empty);
-    rpc Heartbeat (Empty) returns (Empty);
+    rpc Elected (Empty) returns (Empty);
+    rpc Heartbeat (HeartbeatMessage) returns (Empty);
 }
 
 message Empty {}
@@ -18,4 +19,8 @@ message ReplicaReply {
 
 message ElectionMessage {
     
+}
+
+message HeartbeatMessage {
+    repeated string Replicas = 1;
 }

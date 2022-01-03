@@ -105,7 +105,8 @@ var Replication_ServiceDesc = grpc.ServiceDesc{
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ElectionClient interface {
 	Election(ctx context.Context, in *ElectionMessage, opts ...grpc.CallOption) (*Empty, error)
-	Heartbeat(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error)
+	Elected(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error)
+	Heartbeat(ctx context.Context, in *HeartbeatMessage, opts ...grpc.CallOption) (*Empty, error)
 }
 
 type electionClient struct {
@@ -125,7 +126,16 @@ func (c *electionClient) Election(ctx context.Context, in *ElectionMessage, opts
 	return out, nil
 }
 
-func (c *electionClient) Heartbeat(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error) {
+func (c *electionClient) Elected(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error) {
+	out := new(Empty)
+	err := c.cc.Invoke(ctx, "/Election/Elected", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *electionClient) Heartbeat(ctx context.Context, in *HeartbeatMessage, opts ...grpc.CallOption) (*Empty, error) {
 	out := new(Empty)
 	err := c.cc.Invoke(ctx, "/Election/Heartbeat", in, out, opts...)
 	if err != nil {
@@ -139,7 +149,8 @@ func (c *electionClient) Heartbeat(ctx context.Context, in *Empty, opts ...grpc.
 // for forward compatibility
 type ElectionServer interface {
 	Election(context.Context, *ElectionMessage) (*Empty, error)
-	Heartbeat(context.Context, *Empty) (*Empty, error)
+	Elected(context.Context, *Empty) (*Empty, error)
+	Heartbeat(context.Context, *HeartbeatMessage) (*Empty, error)
 	mustEmbedUnimplementedElectionServer()
 }
 
@@ -150,7 +161,10 @@ type UnimplementedElectionServer struct {
 func (UnimplementedElectionServer) Election(context.Context, *ElectionMessage) (*Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Election not implemented")
 }
-func (UnimplementedElectionServer) Heartbeat(context.Context, *Empty) (*Empty, error) {
+func (UnimplementedElectionServer) Elected(context.Context, *Empty) (*Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Elected not implemented")
+}
+func (UnimplementedElectionServer) Heartbeat(context.Context, *HeartbeatMessage) (*Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Heartbeat not implemented")
 }
 func (UnimplementedElectionServer) mustEmbedUnimplementedElectionServer() {}
@@ -184,8 +198,26 @@ func _Election_Election_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Election_Heartbeat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Election_Elected_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ElectionServer).Elected(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/Election/Elected",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ElectionServer).Elected(ctx, req.(*Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Election_Heartbeat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HeartbeatMessage)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -197,7 +229,7 @@ func _Election_Heartbeat_Handler(srv interface{}, ctx context.Context, dec func(
 		FullMethod: "/Election/Heartbeat",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ElectionServer).Heartbeat(ctx, req.(*Empty))
+		return srv.(ElectionServer).Heartbeat(ctx, req.(*HeartbeatMessage))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -212,6 +244,10 @@ var Election_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Election",
 			Handler:    _Election_Election_Handler,
+		},
+		{
+			MethodName: "Elected",
+			Handler:    _Election_Elected_Handler,
 		},
 		{
 			MethodName: "Heartbeat",
