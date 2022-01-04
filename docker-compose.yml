@@ -8,7 +8,7 @@ services:
       app_net:
         ipv4_address: 172.16.238.2
     environment:
-      REPLICAS: "172.16.238.3:5001,172.16.238.4:5001"
+      REPLICAS: "172.16.238.2:5001,172.16.238.3:5001,172.16.238.4:5001"
       LEADER: TRUE
   
   replica-2:
@@ -19,7 +19,7 @@ services:
       app_net:
         ipv4_address: 172.16.238.3
     environment:
-      REPLICAS: "172.16.238.2:5001,172.16.238.4:5001"
+      REPLICAS: "172.16.238.2:5001,172.16.238.3:5001,172.16.238.4:5001"
       LEADER: FALSE
 
   replica-3:
@@ -30,7 +30,7 @@ services:
       app_net:
         ipv4_address: 172.16.238.4
     environment:
-      REPLICAS: "172.16.238.2:5001,172.16.238.3:5001"
+      REPLICAS: "172.16.238.2:5001,172.16.238.3:5001,172.16.238.4:5001"
       LEADER: FALSE
 
 networks:
