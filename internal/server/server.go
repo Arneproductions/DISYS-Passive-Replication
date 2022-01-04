@@ -138,9 +138,11 @@ func (n *Node) Increment(ctx context.Context, message *proto.Empty) (*proto.Repl
 }
 
 func (n *Node) SendIncrement(ip string) (*proto.ReplicaReply, error) {
-	conn, err := grpc.Dial(ip, grpc.WithInsecure(), grpc.WithBlock())
+	conn, err := grpc.Dial(ip, grpc.WithInsecure(), grpc.FailOnNonTempDialError(true), grpc.WithBlock())
 	if err != nil {
 		log.Printf("Could not connect: %v\n", err)
+		n.declareReplicaDeadByIp(ip)
+		return nil, errors.New("replica is not reachable")
 	}
 	defer conn.Close()
 
@@ -210,9 +212,11 @@ func (n *Node) SendElection() {
 			continue
 		}
 		log.Print("Send election request to: " + replicaIp)
-		conn, err := grpc.Dial(replicaIp, grpc.WithInsecure(), grpc.WithBlock())
+		conn, err := grpc.Dial(replicaIp, grpc.WithInsecure(), grpc.FailOnNonTempDialError(true), grpc.WithBlock())
 		if err != nil {
 			log.Printf("Could not connect: %v\n", err)
+			n.declareReplicaDead(idx)
+			return
 		}
 		defer conn.Close()
 
@@ -256,9 +260,11 @@ func (n *Node) SendElected(electedIp string) {
 			continue
 		}
 
-		conn, err := grpc.Dial(replicaIp, grpc.WithInsecure(), grpc.WithBlock())
+		conn, err := grpc.Dial(replicaIp, grpc.WithInsecure(), grpc.FailOnNonTempDialError(true), grpc.WithBlock())
 		if err != nil {
 			log.Printf("Could not connect: %v\n", err)
+			n.declareReplicaDead(idx)
+			return
 		}
 		defer conn.Close()
 
@@ -285,9 +291,11 @@ func (n *Node) SendHeartbeat() {
 		}
 		go func(idx int, ip string) {
 
-			conn, err := grpc.Dial(ip, grpc.WithInsecure(), grpc.WithBlock())
+			conn, err := grpc.Dial(ip, grpc.WithInsecure(), grpc.FailOnNonTempDialError(true), grpc.WithBlock())
 			if err != nil {
 				log.Printf("Could not connect: %v\n", err)
+				n.declareReplicaDead(idx)
+				return
 			}
 			defer conn.Close()
 
