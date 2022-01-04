@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net"
+	"os"
 	grpcUtil "passive-replication/internal/grpc"
 	proto "passive-replication/proto"
 	"strings"
@@ -23,6 +24,7 @@ const (
 )
 
 type Node struct {
+	id          int32
 	ip          string
 	status      NodeStatus
 	leaderIp    string
@@ -37,6 +39,7 @@ type Node struct {
 func CreateNewNode(ip string, status NodeStatus, leaderIp string, replicas []string) Node {
 
 	return Node{
+		id:          int32(os.Getpid()),
 		ip:          ip,
 		status:      status,
 		leaderIp:    leaderIp,
@@ -76,7 +79,8 @@ func (n *Node) Increment(ctx context.Context, message *proto.Empty) (*proto.Repl
 		// Update replicas
 		for idx, v := range n.replicas {
 
-			if len(v) == 0 {
+			// Skip replica that is either declared dead or is itself
+			if strings.HasPrefix(v, n.ip) || len(v) == 0 {
 				continue
 			}
 
@@ -128,14 +132,98 @@ func (n *Node) Election(ctx context.Context, in *proto.ElectionMessage) (*proto.
 	return nil, nil
 }
 
-func (n *Node) Elected(ctx context.Context, in *proto.Empty) (*proto.Empty, error) {
-	return nil, nil
+func (n *Node) Elected(ctx context.Context, in *proto.ElectedMessage) (*proto.Empty, error) {
+
+	n.leaderIp = in.GetLeaderIp()
+
+	if strings.HasPrefix(n.leaderIp, n.ip) {
+		n.status = Leader
+		// Do Leader stuff here... or?
+	} else {
+		n.status = Replica
+		// Setup replica stuff here... or?
+	}
+
+	return &proto.Empty{}, nil
 }
 
 func (n *Node) Heartbeat(ctx context.Context, in *proto.HeartbeatMessage) (*proto.Empty, error) {
 	n.replicas = in.GetReplicas() // Update list of replicas
 
 	return &proto.Empty{}, nil
+}
+
+func (n *Node) SendElection() {
+
+	// TODO: Set status to 'waiting for votes'
+
+	currentHighestValue := n.value
+	currentHighestIp := n.ip
+	currentHighestId := n.id
+
+	for idx, replicaIp := range n.replicas {
+
+		// Do not perform heartbeats on nodes that are dead or to itself
+		if strings.HasPrefix(replicaIp, n.ip) || len(replicaIp) == 0 {
+			continue
+		}
+
+		conn, err := grpc.Dial(replicaIp, grpc.WithInsecure(), grpc.WithBlock())
+		if err != nil {
+			log.Printf("Could not connect: %v\n", err)
+		}
+		defer conn.Close()
+
+		c := proto.NewElectionClient(conn)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		voteReply, err := c.Election(ctx, &proto.ElectionMessage{
+			Value: currentHighestValue,
+		})
+		if err != nil {
+			defer n.declareReplicaDead(idx)
+		}
+
+		if (voteReply.Value > currentHighestValue) || (voteReply.Value == currentHighestValue && voteReply.ProcessId > currentHighestId) {
+			currentHighestId = voteReply.ProcessId
+			currentHighestValue = voteReply.Value
+			currentHighestIp = replicaIp
+		}
+	}
+
+	n.SendElected(currentHighestIp)
+
+	if strings.HasPrefix(currentHighestIp, n.ip) {
+		n.status = Leader
+	} else {
+		n.status = Replica
+	}
+}
+
+func (n *Node) SendElected(electedIp string) {
+	for idx, replicaIp := range n.replicas {
+
+		// Do not send Elected to nodes that are dead or to itself
+		if strings.HasPrefix(replicaIp, n.ip) || len(replicaIp) == 0 {
+			continue
+		}
+
+		conn, err := grpc.Dial(replicaIp, grpc.WithInsecure(), grpc.WithBlock())
+		if err != nil {
+			log.Printf("Could not connect: %v\n", err)
+		}
+		defer conn.Close()
+
+		c := proto.NewElectionClient(conn)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		if _, err := c.Elected(ctx, &proto.ElectedMessage{LeaderIp: electedIp}); err != nil {
+
+			defer n.declareReplicaDead(idx)
+		}
+	}
 }
 
 func (n *Node) SendHeartbeat() {
@@ -162,7 +250,7 @@ func (n *Node) SendHeartbeat() {
 		defer cancel()
 
 		if _, err := c.Heartbeat(ctx, &proto.HeartbeatMessage{Replicas: n.replicas}); err != nil {
-			
+
 			defer n.declareReplicaDead(idx)
 		}
 	}
@@ -182,5 +270,5 @@ func (n *Node) HasStatus(status NodeStatus) bool {
 func (n *Node) requestIsFromLeader(ctx context.Context) bool {
 	callerIp := grpcUtil.GetClientIpAddress(ctx)
 
-	return n.leaderIp == callerIp
+	return strings.HasPrefix(n.leaderIp, callerIp)
 }
