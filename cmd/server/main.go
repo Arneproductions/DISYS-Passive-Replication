@@ -16,7 +16,7 @@ func main() {
 	flag.Parse()
 	
 	replicas := strings.Split(*replicasFlag, ",")
-	node := server.CreateNewNode(net.GetOutboundIp("172"), ParseLeaderFlag(*leaderFlag), "127.0.0.1:5001", replicas)
+	node := server.CreateNewNode(net.GetOutboundIp("172"), ParseLeaderFlag(*leaderFlag), "172.16.238.2:5001", replicas)
 	
 	node.StartServer()
 }
