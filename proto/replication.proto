@@ -1,0 +1,31 @@
+syntax = "proto3";
+option go_package = "passive-replication/proto";
+
+service Replication {
+    rpc Increment (Empty) returns (ReplicaReply);
+}
+
+service Election {
+    rpc Election (Empty) returns (ElectionMessage);
+    rpc Elected (ElectedMessage) returns (Empty);
+    rpc Heartbeat (HeartbeatMessage) returns (Empty);
+}
+
+message Empty {}
+
+message ReplicaReply {
+    int32 value = 1;
+}
+
+message ElectionMessage {
+    int32 value = 1;
+    int32 processId = 2;
+}
+
+message ElectedMessage {
+    string leaderIp = 1;
+}
+
+message HeartbeatMessage {
+    repeated string Replicas = 1;
+}

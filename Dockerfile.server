@@ -1,0 +1,21 @@
+# syntax=docker/dockerfile:1
+
+FROM golang:1.17-alpine
+
+ENV REPLICAS=""
+ENV LEADER=""
+
+WORKDIR /app
+
+COPY go.mod ./
+COPY go.sum ./
+
+RUN go mod download
+
+COPY . ./
+
+RUN go build -o /server ./cmd/server/main.go
+
+EXPOSE 5001
+
+CMD ["sh", "-c", "/server --replicas=${REPLICAS} --leader=${LEADER}"]

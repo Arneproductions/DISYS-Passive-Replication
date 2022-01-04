@@ -1,0 +1,41 @@
+version: "3.3"
+services:
+  replica-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    networks:
+      app_net:
+        ipv4_address: 172.16.238.2
+    environment:
+      REPLICAS: "172.16.238.2:5001,172.16.238.3:5001,172.16.238.4:5001"
+      LEADER: TRUE
+  
+  replica-2:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    networks:
+      app_net:
+        ipv4_address: 172.16.238.3
+    environment:
+      REPLICAS: "172.16.238.2:5001,172.16.238.3:5001,172.16.238.4:5001"
+      LEADER: FALSE
+
+  replica-3:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    networks:
+      app_net:
+        ipv4_address: 172.16.238.4
+    environment:
+      REPLICAS: "172.16.238.2:5001,172.16.238.3:5001,172.16.238.4:5001"
+      LEADER: FALSE
+
+networks:
+  app_net:
+    ipam:
+      driver: default
+      config:
+        - subnet: "172.16.238.0/24"
