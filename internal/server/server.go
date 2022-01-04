@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"math/rand"
 	"errors"
 	"log"
 	"net"
@@ -10,6 +11,7 @@ import (
 	proto "passive-replication/proto"
 	"strings"
 	"sync"
+	"time"
 
 	"google.golang.org/grpc"
 )
@@ -30,6 +32,7 @@ type Node struct {
 	leaderIp    string
 	value       int32
 	replicas    []string
+	electionTime time.Time
 	statusMutex sync.RWMutex
 	valueMutex  sync.RWMutex
 	proto.UnimplementedElectionServer
@@ -38,6 +41,8 @@ type Node struct {
 
 func CreateNewNode(ip string, status NodeStatus, leaderIp string, replicas []string) Node {
 
+	log.Printf("Creating node with following parameters, IP: %s, Status: %v, Replica Endpoints: %v", ip, status, replicas)
+
 	return Node{
 		id:          int32(os.Getpid()),
 		ip:          ip,
@@ -45,6 +50,7 @@ func CreateNewNode(ip string, status NodeStatus, leaderIp string, replicas []str
 		leaderIp:    leaderIp,
 		value:       0,
 		replicas:    replicas,
+		electionTime: time.Now(),
 		statusMutex: sync.RWMutex{},
 		valueMutex:  sync.RWMutex{},
 	}
@@ -60,7 +66,7 @@ func (n *Node) StartServer() {
 
 	s := grpc.NewServer()
 	proto.RegisterReplicationServer(s, n)
-	// TODO: proto.RegisterElectionServer(s, n)
+	proto.RegisterElectionServer(s, n)
 
 	log.Printf("Server listening on %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {
@@ -141,10 +147,12 @@ func (n *Node) Elected(ctx context.Context, in *proto.ElectedMessage) (*proto.Em
 
 	if strings.HasPrefix(n.leaderIp, n.ip) {
 		n.SetStatus(Leader)
-		// Do Leader stuff here... or?
+		go n.runHeartbeatProcess()
 	} else {
 		n.SetStatus(Replica)
-		// Setup replica stuff here... or?
+		n.electionTime = time.Now()
+
+		go n.runElectionProcess()
 	}
 
 	return &proto.Empty{}, nil
@@ -152,13 +160,13 @@ func (n *Node) Elected(ctx context.Context, in *proto.ElectedMessage) (*proto.Em
 
 func (n *Node) Heartbeat(ctx context.Context, in *proto.HeartbeatMessage) (*proto.Empty, error) {
 	n.replicas = in.GetReplicas() // Update list of replicas
+	n.electionTime = time.Now()
 
 	return &proto.Empty{}, nil
 }
 
 func (n *Node) SendElection() {
 
-	// TODO: Set status to 'waiting for votes'
 	n.SetStatus(WaitingVotes)
 
 	currentHighestValue := n.value
@@ -197,9 +205,11 @@ func (n *Node) SendElection() {
 	n.SendElected(currentHighestIp)
 
 	if strings.HasPrefix(currentHighestIp, n.ip) {
-		n.status = Leader
+		n.SetStatus(Leader)
+		go n.runHeartbeatProcess()
 	} else {
-		n.status = Replica
+		n.SetStatus(Replica)
+		go n.runElectionProcess()
 	}
 }
 
@@ -230,31 +240,29 @@ func (n *Node) SendElected(electedIp string) {
 
 func (n *Node) SendHeartbeat() {
 
-	if n.status != Leader {
-		return // Ensure only the leader can perform heartbeats
-	}
-
 	for idx, replicaIp := range n.replicas {
 
 		// Do not perform heartbeats on nodes that are dead or to itself
 		if strings.HasPrefix(replicaIp, n.ip) || len(replicaIp) == 0 {
 			continue
 		}
+		go func (idx int, ip string) {
 
-		conn, err := grpc.Dial(replicaIp, grpc.WithInsecure(), grpc.WithBlock())
-		if err != nil {
-			log.Printf("Could not connect: %v\n", err)
-		}
-		defer conn.Close()
+			conn, err := grpc.Dial(ip, grpc.WithInsecure(), grpc.WithBlock())
+			if err != nil {
+				log.Printf("Could not connect: %v\n", err)
+			}
+			defer conn.Close()
 
-		c := proto.NewElectionClient(conn)
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+			c := proto.NewElectionClient(conn)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
-		if _, err := c.Heartbeat(ctx, &proto.HeartbeatMessage{Replicas: n.replicas}); err != nil {
+			if _, err := c.Heartbeat(ctx, &proto.HeartbeatMessage{Replicas: n.replicas}); err != nil {
 
-			defer n.declareReplicaDead(idx)
-		}
+				defer n.declareReplicaDead(idx)
+			}
+		}(idx, replicaIp)
 	}
 }
 
@@ -280,4 +288,44 @@ func (n *Node) requestIsFromLeader(ctx context.Context) bool {
 	callerIp := grpcUtil.GetClientIpAddress(ctx)
 
 	return strings.HasPrefix(n.leaderIp, callerIp)
+}
+
+/*
+	Is a process that keeps track of when to do an election. 
+	It does not try to run an election if the process is in state 'ElectionOngoing' and the time since the 
+*/
+func (n *Node) runElectionProcess() {
+	var t *time.Ticker = time.NewTicker(10 * time.Millisecond)
+	randVal := rand.Intn(500) + 400
+	var electionTimeDuration time.Duration = time.Millisecond * time.Duration(randVal) // interval between 400 and 900
+
+	for {
+		<-t.C
+
+		if !n.HasStatus(Replica) {
+			return // Do nothing... it will either elect someone soon or it is the leader
+		} 
+
+		if elapsed := time.Since(n.electionTime); elapsed >= electionTimeDuration {
+			n.SendElection()
+			return
+		}
+	}
+}
+
+func (n *Node) runHeartbeatProcess() {
+	var t *time.Ticker = time.NewTicker(200 * time.Millisecond) // Triggers heartbeats after 200 miliseconds
+
+	for {
+		<-t.C
+		
+		if !n.HasStatus(Leader) {
+			// Process is not the leader and should therefor not send heartbeats. Go back to electionTimer
+
+			go n.runElectionProcess()
+			return
+		}
+
+		n.SendHeartbeat()
+	}
 }
