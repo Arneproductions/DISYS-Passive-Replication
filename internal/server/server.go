@@ -128,8 +128,11 @@ func (n *Node) SendIncrement(ip string) (*proto.ReplicaReply, error) {
 	}
 }
 
-func (n *Node) Election(ctx context.Context, in *proto.ElectionMessage) (*proto.Empty, error) {
-	return nil, nil
+func (n *Node) Election(ctx context.Context, in *proto.Empty) (*proto.ElectionMessage, error) {
+
+	n.SetStatus(ElectionOngoing)
+
+	return &proto.ElectionMessage{Value: n.value, ProcessId: n.id}, nil
 }
 
 func (n *Node) Elected(ctx context.Context, in *proto.ElectedMessage) (*proto.Empty, error) {
@@ -137,10 +140,10 @@ func (n *Node) Elected(ctx context.Context, in *proto.ElectedMessage) (*proto.Em
 	n.leaderIp = in.GetLeaderIp()
 
 	if strings.HasPrefix(n.leaderIp, n.ip) {
-		n.status = Leader
+		n.SetStatus(Leader)
 		// Do Leader stuff here... or?
 	} else {
-		n.status = Replica
+		n.SetStatus(Replica)
 		// Setup replica stuff here... or?
 	}
 
@@ -156,6 +159,7 @@ func (n *Node) Heartbeat(ctx context.Context, in *proto.HeartbeatMessage) (*prot
 func (n *Node) SendElection() {
 
 	// TODO: Set status to 'waiting for votes'
+	n.SetStatus(WaitingVotes)
 
 	currentHighestValue := n.value
 	currentHighestIp := n.ip
@@ -178,9 +182,7 @@ func (n *Node) SendElection() {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		voteReply, err := c.Election(ctx, &proto.ElectionMessage{
-			Value: currentHighestValue,
-		})
+		voteReply, err := c.Election(ctx, &proto.Empty{})
 		if err != nil {
 			defer n.declareReplicaDead(idx)
 		}
@@ -258,6 +260,13 @@ func (n *Node) SendHeartbeat() {
 
 func (n *Node) declareReplicaDead(index int) {
 	n.replicas[index] = ""
+}
+
+func (n *Node) SetStatus(status NodeStatus) {
+	n.statusMutex.Lock()
+	defer n.statusMutex.Unlock()
+
+	n.status = status
 }
 
 func (n *Node) HasStatus(status NodeStatus) bool {

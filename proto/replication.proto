@@ -6,7 +6,7 @@ service Replication {
 }
 
 service Election {
-    rpc Election (ElectionMessage) returns (ElectionMessage);
+    rpc Election (Empty) returns (ElectionMessage);
     rpc Elected (ElectedMessage) returns (Empty);
     rpc Heartbeat (HeartbeatMessage) returns (Empty);
 }

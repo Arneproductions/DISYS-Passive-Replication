@@ -104,7 +104,7 @@ var Replication_ServiceDesc = grpc.ServiceDesc{
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ElectionClient interface {
-	Election(ctx context.Context, in *ElectionMessage, opts ...grpc.CallOption) (*ElectionMessage, error)
+	Election(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ElectionMessage, error)
 	Elected(ctx context.Context, in *ElectedMessage, opts ...grpc.CallOption) (*Empty, error)
 	Heartbeat(ctx context.Context, in *HeartbeatMessage, opts ...grpc.CallOption) (*Empty, error)
 }
@@ -117,7 +117,7 @@ func NewElectionClient(cc grpc.ClientConnInterface) ElectionClient {
 	return &electionClient{cc}
 }
 
-func (c *electionClient) Election(ctx context.Context, in *ElectionMessage, opts ...grpc.CallOption) (*ElectionMessage, error) {
+func (c *electionClient) Election(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ElectionMessage, error) {
 	out := new(ElectionMessage)
 	err := c.cc.Invoke(ctx, "/Election/Election", in, out, opts...)
 	if err != nil {
@@ -148,7 +148,7 @@ func (c *electionClient) Heartbeat(ctx context.Context, in *HeartbeatMessage, op
 // All implementations must embed UnimplementedElectionServer
 // for forward compatibility
 type ElectionServer interface {
-	Election(context.Context, *ElectionMessage) (*ElectionMessage, error)
+	Election(context.Context, *Empty) (*ElectionMessage, error)
 	Elected(context.Context, *ElectedMessage) (*Empty, error)
 	Heartbeat(context.Context, *HeartbeatMessage) (*Empty, error)
 	mustEmbedUnimplementedElectionServer()
@@ -158,7 +158,7 @@ type ElectionServer interface {
 type UnimplementedElectionServer struct {
 }
 
-func (UnimplementedElectionServer) Election(context.Context, *ElectionMessage) (*ElectionMessage, error) {
+func (UnimplementedElectionServer) Election(context.Context, *Empty) (*ElectionMessage, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Election not implemented")
 }
 func (UnimplementedElectionServer) Elected(context.Context, *ElectedMessage) (*Empty, error) {
@@ -181,7 +181,7 @@ func RegisterElectionServer(s grpc.ServiceRegistrar, srv ElectionServer) {
 }
 
 func _Election_Election_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ElectionMessage)
+	in := new(Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -193,7 +193,7 @@ func _Election_Election_Handler(srv interface{}, ctx context.Context, dec func(i
 		FullMethod: "/Election/Election",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ElectionServer).Election(ctx, req.(*ElectionMessage))
+		return srv.(ElectionServer).Election(ctx, req.(*Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
