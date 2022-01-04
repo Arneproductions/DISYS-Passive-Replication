@@ -6,8 +6,8 @@ service Replication {
 }
 
 service Election {
-    rpc Election (ElectionMessage) returns (Empty);
-    rpc Elected (Empty) returns (Empty);
+    rpc Election (ElectionMessage) returns (ElectionMessage);
+    rpc Elected (ElectedMessage) returns (Empty);
     rpc Heartbeat (HeartbeatMessage) returns (Empty);
 }
 
@@ -18,7 +18,12 @@ message ReplicaReply {
 }
 
 message ElectionMessage {
-    
+    int32 value = 1;
+    int32 processId = 2;
+}
+
+message ElectedMessage {
+    string leaderIp = 1;
 }
 
 message HeartbeatMessage {
